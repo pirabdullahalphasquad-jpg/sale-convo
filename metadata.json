@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix AI Employee Onboarding Wizard",
+  "description": "A clean, minimal 7-step onboarding wizard to set up and deploy a 24/7 WhatsApp AI sales \u0026 support employee.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
