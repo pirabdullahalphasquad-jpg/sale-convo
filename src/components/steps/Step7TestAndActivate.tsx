@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SUGGESTED_TEST_QUESTIONS } from '../../data/initialData';
 import { ChatMessage, WizardState } from '../../types';
+import { callChatTest } from '../../lib/chatApi';
 import {
   ArrowLeft,
   Send,
@@ -134,7 +135,7 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     }
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || inputText).trim();
     if (!query) return;
 
@@ -146,14 +147,17 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
       timestamp: time,
     };
 
+    // Append the customer message immediately and show typing indicator
     updateState({
       testChatMessages: [...state.testChatMessages, userMsg],
     });
     setInputText('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(query);
+    try {
+      // Call the real Gemini-backed Supabase Edge Function
+      const aiResponse = await callChatTest(query, state);
+
       const aiMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
@@ -164,8 +168,23 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
       updateState({
         testChatMessages: [...state.testChatMessages, userMsg, aiMsg],
       });
+    } catch (err) {
+      console.error('[chat-test] Edge Function call failed:', err);
+
+      // Show an inline error bubble so the UI never breaks silently
+      const errMsg: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
+        sender: 'ai',
+        text: '[AI Error] Could not reach the AI service. Please check your internet connection or Supabase function deployment.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      updateState({
+        testChatMessages: [...state.testChatMessages, userMsg, errMsg],
+      });
+    } finally {
       setIsTyping(false);
-    }, 650);
+    }
   };
 
   const handleFeedback = (msgId: string, type: 'good' | 'bad') => {
