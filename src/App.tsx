@@ -21,13 +21,16 @@ import { LandingPage } from './components/LandingPage';
 import { DashboardView } from './components/DashboardView';
 import { LiveInboxModal } from './components/LiveInboxModal';
 import { HelpModal } from './components/HelpModal';
+import { WhatsAppConnectDashboard } from './components/dashboard/WhatsAppConnectDashboard';
+import { LiveInbox } from './components/dashboard/LiveInbox';
+import { OrderManagement } from './components/dashboard/OrderManagement';
+import { MessageSquare, Settings, ShoppingBag } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('wizard');
   const [wizardState, setWizardState] = useState<WizardState>(INITIAL_WIZARD_STATE);
   const [showInboxModal, setShowInboxModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-
   const updateWizardState = (updates: Partial<WizardState>) => {
     setWizardState((prev) => ({ ...prev, ...updates }));
   };
@@ -64,10 +67,17 @@ export default function App() {
   const handleActivateAgent = () => {
     setWizardState((prev) => ({
       ...prev,
-      currentStep: 8, // Success screen state
       isActivated: true,
       completedSteps: [1, 2, 3, 4, 5, 6, 7],
     }));
+    // Leave the onboarding wizard and open the post-activation WhatsApp setup dashboard
+    setCurrentView('whatsapp');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackToWizard = () => {
+    setWizardState((prev) => ({ ...prev, currentStep: 7 }));
+    setCurrentView('wizard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -103,6 +113,72 @@ export default function App() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
+        )}
+
+        {/* POST-ACTIVATION VIEWS: WhatsApp Setup, Live Inbox & Orders Switcher */}
+        {(currentView === 'whatsapp' || currentView === 'inbox' || currentView === 'orders') && (
+          <div className="space-y-6">
+            {/* View Switcher Tabs */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+                <button
+                  type="button"
+                  id="tab-live-inbox-btn"
+                  onClick={() => setCurrentView('inbox')}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                    currentView === 'inbox'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4 text-emerald-600" />
+                  <span>Live Inbox &amp; Takeover</span>
+                </button>
+                <button
+                  type="button"
+                  id="tab-orders-btn"
+                  onClick={() => setCurrentView('orders')}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                    currentView === 'orders'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                  <span>Orders</span>
+                </button>
+                <button
+                  type="button"
+                  id="tab-whatsapp-setup-btn"
+                  onClick={() => setCurrentView('whatsapp')}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                    currentView === 'whatsapp'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Settings className="w-4 h-4 text-emerald-600" />
+                  <span>WhatsApp Cloud API Setup</span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-500 hidden sm:block">
+                Merchant Hub • <span className="font-semibold text-emerald-700">Online</span>
+              </div>
+            </div>
+
+            {currentView === 'whatsapp' && (
+              <WhatsAppConnectDashboard state={wizardState} onBackToWizard={handleBackToWizard} />
+            )}
+
+            {currentView === 'inbox' && (
+              <LiveInbox state={wizardState} />
+            )}
+
+            {currentView === 'orders' && (
+              <OrderManagement />
+            )}
+          </div>
         )}
 
         {/* VIEW 2: Post-Activation Dashboard */}

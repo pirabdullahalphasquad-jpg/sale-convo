@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, HelpCircle, ArrowRight, Home, Sparkles } from 'lucide-react';
+import { Bot, HelpCircle, Home, Sparkles, MessageSquare, ShoppingBag } from 'lucide-react';
 import { AppView } from '../types';
 
 interface HeaderProps {
@@ -53,6 +53,10 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'Overview'
                 : currentView === 'dashboard'
                 ? 'Agent Dashboard'
+                : currentView === 'whatsapp'
+                ? 'WhatsApp Setup'
+                : currentView === 'orders'
+                ? 'Orders'
                 : 'Live WhatsApp Inbox'}
             </span>
           </div>
@@ -85,6 +89,30 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Setup Wizard</span>
+            </button>
+            <button
+              id="nav-inbox-btn"
+              onClick={() => onViewChange('inbox')}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                currentView === 'inbox' || currentView === 'whatsapp'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Live Inbox</span>
+            </button>
+            <button
+              id="nav-orders-btn"
+              onClick={() => onViewChange('orders')}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                currentView === 'orders'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Orders</span>
             </button>
           </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SUGGESTED_TEST_QUESTIONS } from '../../data/initialData';
 import { ChatMessage, WizardState } from '../../types';
-import { callChatTest } from '../../lib/chatApi';
+import { callChatTest, ChatHistoryMessage } from '../../lib/chatApi';
 import {
   ArrowLeft,
   Send,
@@ -155,14 +155,31 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     setIsTyping(true);
 
     try {
+      // Recent conversation (before the current message) so follow-ups keep context
+      const history: ChatHistoryMessage[] = state.testChatMessages
+        .filter((m) => !m.text.startsWith('[AI Error]'))
+        .slice(-10)
+        .map((m) => ({
+          role: m.sender === 'customer' ? ('user' as const) : ('model' as const),
+          text: m.text,
+        }));
+
       // Call the real Gemini-backed Supabase Edge Function
-      const aiResponse = await callChatTest(query, state);
+      const aiResponse = await callChatTest(query, state, history);
+
+      // Show the checkout button only if the server flagged it AND the reply
+      // actually names a product from the store catalog.
+      const replyLower = aiResponse.reply.toLowerCase();
+      const mentionsCatalogProduct = state.products.some(
+        (p) => p.name && replyLower.includes(p.name.trim().toLowerCase())
+      );
 
       const aiMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
-        text: aiResponse,
+        text: aiResponse.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isCheckout: aiResponse.isCheckout && mentionsCatalogProduct,
       };
 
       updateState({
@@ -420,6 +437,19 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
                           {isCustomer && <CheckCheck className="w-3.5 h-3.5 text-blue-500" />}
                         </div>
                       </div>
+
+                      {/* Checkout action directly under the bubble */}
+                      {msg.isCheckout && (
+                        <button
+                          type="button"
+                          id={`confirm-order-${msg.id}`}
+                          onClick={() => alert('Redirecting to WhatsApp to confirm order...')}
+                          className="mt-2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-md transition-all cursor-pointer"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Confirm Order via WhatsApp</span>
+                        </button>
+                      )}
 
                       {/* Feedback Section for AI messages */}
                       {!isCustomer && (

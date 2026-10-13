@@ -9,10 +9,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { WizardState } from '../types';
 
-const supabaseUrl     = 'https://dqsutbeliwalpwscupgg.supabase.co';
+export const supabaseUrl = 'https://dqsutbeliwalpwscupgg.supabase.co';
 const supabaseAnonKey = 'sb_publishable_g4ikPsbB58aXzbFRXT4Ahw_O1ryZF1s';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export interface ChatHistoryMessage {
+  role: 'user' | 'model';
+  text: string;
+}
 
 /**
  * Calls the `chat-test` Edge Function via the Supabase SDK and returns
@@ -20,15 +25,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
  *
  * @param userMessage - The customer's message.
  * @param wizardState - The full wizard configuration (products, policies, tone, etc.).
- * @returns The AI reply text.
+ * @param history - Recent conversation turns (excluding userMessage) so follow-ups keep context.
+ * @returns The AI reply text plus isCheckout (true only when a catalog product was identified).
  * @throws An Error with the Supabase error message if the invocation fails.
  */
 export async function callChatTest(
   userMessage: string,
-  wizardState: WizardState
-): Promise<string> {
+  wizardState: WizardState,
+  history: ChatHistoryMessage[] = []
+): Promise<{ reply: string; isCheckout: boolean }> {
   const { data, error } = await supabase.functions.invoke('chat-test', {
-    body: { userMessage, wizardState },
+    body: { userMessage, wizardState, history },
   });
 
   if (error) {
@@ -39,5 +46,5 @@ export async function callChatTest(
     throw new Error('Unexpected response shape from chat-test function.');
   }
 
-  return data.reply;
+  return { reply: data.reply, isCheckout: data.isCheckout === true };
 }
