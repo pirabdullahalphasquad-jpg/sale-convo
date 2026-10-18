@@ -148,9 +148,12 @@ async function generateGeminiReply(apiKey: string, systemPrompt: string, userTex
           },
         ],
         generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 1500,
+          temperature: 0.3,
+          maxOutputTokens: 1024,
           topP: 0.8,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       };
 
