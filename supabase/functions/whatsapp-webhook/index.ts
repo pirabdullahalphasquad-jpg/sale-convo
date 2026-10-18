@@ -13,6 +13,10 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
+// ─── Message Deduplication Cache ──────────────────────────────────────────────
+const processedMessageIds = new Set<string>();
+const MAX_PROCESSED_CACHE = 1000;
+
 // ─── CORS Headers ─────────────────────────────────────────────────────────────
 
 const CORS_HEADERS: Record<string, string> = {
@@ -145,7 +149,7 @@ async function generateGeminiReply(apiKey: string, systemPrompt: string, userTex
         ],
         generationConfig: {
           temperature: 0.4,
-          maxOutputTokens: 512,
+          maxOutputTokens: 1500,
           topP: 0.8,
         },
       };
@@ -342,6 +346,20 @@ serve(async (req: Request): Promise<Response> => {
       const from = message.from;
       const messageId = message.id || "";
       const phoneNumberId = value?.metadata?.phone_number_id || Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "";
+
+      // Deduplication: prevent duplicate processing on Meta webhook retries
+      if (messageId && processedMessageIds.has(messageId)) {
+        console.log(`[whatsapp-webhook] Duplicate message detected (id: ${messageId}). Skipping processing.`);
+        return new Response("EVENT_RECEIVED", { status: 200, headers: CORS_HEADERS });
+      }
+
+      if (messageId) {
+        if (processedMessageIds.size >= MAX_PROCESSED_CACHE) {
+          const oldestKey = processedMessageIds.values().next().value;
+          if (oldestKey) processedMessageIds.delete(oldestKey);
+        }
+        processedMessageIds.add(messageId);
+      }
 
       if (!from) {
         console.warn("[whatsapp-webhook] Missing 'from' field in message, skipping.");
