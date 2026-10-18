@@ -19,12 +19,14 @@ interface DashboardViewProps {
   state: WizardState;
   onEditWizard: (step?: number) => void;
   onOpenInbox: () => void;
+  onOpenOrders?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   state,
   onEditWizard,
   onOpenInbox,
+  onOpenOrders,
 }) => {
   return (
     <div className="space-y-6">
@@ -98,12 +100,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Orders Captured
-          </span>
+        <div
+          onClick={onOpenOrders}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') onOpenOrders?.();
+          }}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-emerald-300 hover:shadow-sm transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Orders Captured
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
+          </div>
           <div className="text-2xl font-bold text-slate-900 mt-1">19 Orders</div>
-          <p className="text-xs text-slate-500 mt-1">Rs. 47,481 volume</p>
+          <p className="text-xs text-slate-500 mt-1">Rs. 47,481 volume • Click to view</p>
         </div>
       </div>
 

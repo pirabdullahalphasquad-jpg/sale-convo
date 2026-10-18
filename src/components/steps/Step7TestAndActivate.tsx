@@ -54,8 +54,10 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     }
   }, [state.testChatMessages, isTyping, activeSubTab]);
 
-  const cleanPhone = (state.whatsappPhoneNumber || '+92 300 1234567').replace(/[^0-9]/g, '');
-  const whatsappTestUrl = `https://wa.me/${cleanPhone}?text=Hi%2C%20I%20have%20a%20question%20about%20your%20products`;
+  const liveBotNumber = '15556624608';
+  const agentName = state.agentName || 'Sara';
+  const whatsappTestUrl = `https://wa.me/${liveBotNumber}?text=${encodeURIComponent(`Hi ${agentName}, do you have cargo pants?`)}`;
+  const [qrLoaded, setQrLoaded] = useState(true);
 
   // Dynamic AI reply generator grounded in user's real business setup
   const generateAIResponse = (userQuestion: string): string => {
@@ -631,10 +633,21 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
                   </div>
                 </div>
 
-                {/* Simulated Clean QR Code */}
+                {/* Real Scannable QR Code */}
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-col items-center shrink-0">
-                  <div className="w-24 h-24 bg-slate-900 rounded-lg p-1.5 flex items-center justify-center text-white">
-                    <QrCode className="w-full h-full text-white" />
+                  <div className="w-24 h-24 bg-white rounded-lg p-1 flex items-center justify-center border border-slate-100 overflow-hidden">
+                    {qrLoaded ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(whatsappTestUrl)}`}
+                        alt="Scan to test on WhatsApp"
+                        className="w-full h-full object-contain"
+                        onError={() => setQrLoaded(false)}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-slate-900 rounded p-1.5 flex items-center justify-center text-white">
+                        <QrCode className="w-full h-full text-white" />
+                      </div>
+                    )}
                   </div>
                   <span className="text-[10px] font-semibold text-slate-500 mt-1.5">
                     Scan to test

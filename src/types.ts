@@ -124,5 +124,5 @@ export interface WizardState {
   activatedAt?: string;
 }
 
-export type AppView = 'wizard' | 'landing' | 'dashboard' | 'inbox' | 'whatsapp' | 'orders';
+export type AppView = 'wizard' | 'landing' | 'dashboard' | 'inbox' | 'orders';
 

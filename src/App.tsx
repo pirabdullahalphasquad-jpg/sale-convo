@@ -21,16 +21,15 @@ import { LandingPage } from './components/LandingPage';
 import { DashboardView } from './components/DashboardView';
 import { LiveInboxModal } from './components/LiveInboxModal';
 import { HelpModal } from './components/HelpModal';
-import { WhatsAppConnectDashboard } from './components/dashboard/WhatsAppConnectDashboard';
 import { LiveInbox } from './components/dashboard/LiveInbox';
 import { OrderManagement } from './components/dashboard/OrderManagement';
-import { MessageSquare, Settings, ShoppingBag } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('wizard');
   const [wizardState, setWizardState] = useState<WizardState>(INITIAL_WIZARD_STATE);
   const [showInboxModal, setShowInboxModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+
   const updateWizardState = (updates: Partial<WizardState>) => {
     setWizardState((prev) => ({ ...prev, ...updates }));
   };
@@ -68,21 +67,26 @@ export default function App() {
     setWizardState((prev) => ({
       ...prev,
       isActivated: true,
+      currentStep: 8,
       completedSteps: [1, 2, 3, 4, 5, 6, 7],
     }));
-    // Leave the onboarding wizard and open the post-activation WhatsApp setup dashboard
-    setCurrentView('whatsapp');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleBackToWizard = () => {
-    setWizardState((prev) => ({ ...prev, currentStep: 7 }));
     setCurrentView('wizard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleGoToDashboard = () => {
     setCurrentView('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenInbox = () => {
+    setCurrentView('inbox');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenOrders = () => {
+    setCurrentView('orders');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleResetSetup = () => {
@@ -91,6 +95,7 @@ export default function App() {
       currentStep: 1,
     }));
     setCurrentView('wizard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -98,8 +103,12 @@ export default function App() {
       {/* Top Application Header */}
       <Header
         currentView={currentView}
-        onViewChange={(view) => setCurrentView(view)}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         currentStep={wizardState.currentStep}
+        isActivated={wizardState.isActivated}
         onOpenHelp={() => setShowHelpModal(true)}
       />
 
@@ -115,73 +124,7 @@ export default function App() {
           />
         )}
 
-        {/* POST-ACTIVATION VIEWS: WhatsApp Setup, Live Inbox & Orders Switcher */}
-        {(currentView === 'whatsapp' || currentView === 'inbox' || currentView === 'orders') && (
-          <div className="space-y-6">
-            {/* View Switcher Tabs */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
-                <button
-                  type="button"
-                  id="tab-live-inbox-btn"
-                  onClick={() => setCurrentView('inbox')}
-                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                    currentView === 'inbox'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <MessageSquare className="w-4 h-4 text-emerald-600" />
-                  <span>Live Inbox &amp; Takeover</span>
-                </button>
-                <button
-                  type="button"
-                  id="tab-orders-btn"
-                  onClick={() => setCurrentView('orders')}
-                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                    currentView === 'orders'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <ShoppingBag className="w-4 h-4 text-emerald-600" />
-                  <span>Orders</span>
-                </button>
-                <button
-                  type="button"
-                  id="tab-whatsapp-setup-btn"
-                  onClick={() => setCurrentView('whatsapp')}
-                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                    currentView === 'whatsapp'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Settings className="w-4 h-4 text-emerald-600" />
-                  <span>WhatsApp Cloud API Setup</span>
-                </button>
-              </div>
-
-              <div className="text-xs text-slate-500 hidden sm:block">
-                Merchant Hub • <span className="font-semibold text-emerald-700">Online</span>
-              </div>
-            </div>
-
-            {currentView === 'whatsapp' && (
-              <WhatsAppConnectDashboard state={wizardState} onBackToWizard={handleBackToWizard} />
-            )}
-
-            {currentView === 'inbox' && (
-              <LiveInbox state={wizardState} />
-            )}
-
-            {currentView === 'orders' && (
-              <OrderManagement />
-            )}
-          </div>
-        )}
-
-        {/* VIEW 2: Post-Activation Dashboard */}
+        {/* VIEW 2: Post-Activation Operations Dashboard */}
         {currentView === 'dashboard' && (
           <DashboardView
             state={wizardState}
@@ -189,11 +132,26 @@ export default function App() {
               handleJumpToStep(step);
               setCurrentView('wizard');
             }}
-            onOpenInbox={() => setShowInboxModal(true)}
+            onOpenInbox={handleOpenInbox}
+            onOpenOrders={handleOpenOrders}
           />
         )}
 
-        {/* VIEW 3: Clean Minimal 7-Step Wizard Flow */}
+        {/* VIEW 3: Live WhatsApp Inbox (Full Page with Human Takeover) */}
+        {currentView === 'inbox' && (
+          <div className="space-y-6">
+            <LiveInbox state={wizardState} />
+          </div>
+        )}
+
+        {/* VIEW 4: Order Management (Full Page) */}
+        {currentView === 'orders' && (
+          <div className="space-y-6">
+            <OrderManagement />
+          </div>
+        )}
+
+        {/* VIEW 5: Clean Minimal 7-Step Wizard Flow */}
         {currentView === 'wizard' && (
           <div>
             {/* Step Progress Indicator (Steps 1-7) */}
@@ -210,7 +168,7 @@ export default function App() {
               <ActivationSuccess
                 state={wizardState}
                 onGoToDashboard={handleGoToDashboard}
-                onOpenInbox={() => setShowInboxModal(true)}
+                onOpenInbox={handleOpenInbox}
                 onResetSetup={handleResetSetup}
               />
             ) : (
@@ -285,7 +243,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Right: AI Employee Summary Card (Inspired by reference summary card) */}
+                {/* Right: AI Employee Summary Card */}
                 <div className="lg:col-span-4">
                   <AISummaryCard state={wizardState} />
                 </div>
@@ -309,7 +267,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Live Inbox Modal */}
+      {/* Live Inbox Modal (kept for quick drawer preview if triggered) */}
       {showInboxModal && (
         <LiveInboxModal
           state={wizardState}
