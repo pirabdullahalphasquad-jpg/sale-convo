@@ -194,12 +194,15 @@ async function generateGeminiReply(apiKey: string, systemPrompt: string, userTex
 // ─── Incoming Message Processor ───────────────────────────────────────────────
 
 /**
- * Processes an incoming WhatsApp message:
+ * Handles an incoming WhatsApp message in the background:
  * 1. Validates environment secrets.
  * 2. Generates an AI response using Gemini.
  * 3. Sends the reply via Meta Graph API v26.0.
+ *
+ * Designed to be called via EdgeRuntime.waitUntil() so that the HTTP 200 OK
+ * is returned to Meta immediately, avoiding cold-start retry storms.
  */
-async function processIncomingMessage(msg: IncomingMessageInfo): Promise<void> {
+async function handleIncomingMessage(msg: IncomingMessageInfo): Promise<void> {
   const { whatsappAccessToken, whatsappPhoneNumberId, geminiApiKey } = getEnvConfig();
 
   const targetPhoneNumberId = msg.phoneNumberId || whatsappPhoneNumberId;
@@ -350,9 +353,9 @@ serve(async (req: Request): Promise<Response> => {
       const messageId = message.id || "";
       const phoneNumberId = value?.metadata?.phone_number_id || Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "";
 
-      // Deduplication: prevent duplicate processing on Meta webhook retries
+      // ── 1. Deduplication: prevent duplicate processing on Meta webhook retries ──
       if (messageId && processedMessageIds.has(messageId)) {
-        console.log(`[whatsapp-webhook] Duplicate message detected (id: ${messageId}). Skipping processing.`);
+        console.log(`[whatsapp-webhook] Skipping duplicate message ID: ${messageId}`);
         return new Response("EVENT_RECEIVED", { status: 200, headers: CORS_HEADERS });
       }
 
@@ -362,6 +365,16 @@ serve(async (req: Request): Promise<Response> => {
           if (oldestKey) processedMessageIds.delete(oldestKey);
         }
         processedMessageIds.add(messageId);
+      }
+
+      // ── 2. Stale retry protection: drop messages older than 90 seconds ──
+      const msgTimestampSec = Number(message.timestamp || 0);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (msgTimestampSec > 0 && nowSec - msgTimestampSec > 90) {
+        console.log(
+          `[whatsapp-webhook] Skipping stale queued webhook retry (${nowSec - msgTimestampSec}s old): ${messageId}`
+        );
+        return new Response("EVENT_RECEIVED", { status: 200, headers: CORS_HEADERS });
       }
 
       if (!from) {
@@ -376,13 +389,23 @@ serve(async (req: Request): Promise<Response> => {
         phoneNumberId,
       });
 
-      // FULLY AWAIT message processing so Edge Function does not shut down prematurely
-      await processIncomingMessage({
+      // ── 3. Non-blocking 200 OK via EdgeRuntime.waitUntil() ──
+      // Schedule Gemini + Graph API work in the background so Meta receives
+      // the 200 OK response immediately (<10 ms), preventing cold-start retries.
+      const backgroundTask = handleIncomingMessage({
         from,
         messageId,
         text: messageText,
         phoneNumberId,
       });
+
+      // @ts-ignore: EdgeRuntime is provided by Supabase Edge Functions runtime
+      if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundTask);
+      } else {
+        await backgroundTask;
+      }
     } catch (err) {
       console.error(
         "[whatsapp-webhook] Error processing incoming webhook event:\n",
