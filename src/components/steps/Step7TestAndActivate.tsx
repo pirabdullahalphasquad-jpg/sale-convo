@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SUGGESTED_TEST_QUESTIONS } from '../../data/initialData';
 import { ChatMessage, WizardState } from '../../types';
-import { callChatTest, ChatHistoryMessage } from '../../lib/chatApi';
+import { callChatTest, saveBusinessProfile, ChatHistoryMessage } from '../../lib/chatApi';
 import {
   ArrowLeft,
   Send,
@@ -240,8 +240,15 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     });
   };
 
-  const handleActivateSaleConvo = () => {
+  const handleActivateSaleConvo = async () => {
     setIsActivating(true);
+    try {
+      // Persist wizard data to Supabase business_profiles table
+      await saveBusinessProfile(state);
+    } catch (err) {
+      console.error('[Step7] saveBusinessProfile failed (non-fatal):', err);
+      // Non-fatal: continue with activation even if save fails
+    }
     setTimeout(() => {
       setIsActivating(false);
       setIsActivatedLocal(true);

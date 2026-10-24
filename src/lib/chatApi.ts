@@ -48,3 +48,44 @@ export async function callChatTest(
 
   return { reply: data.reply, isCheckout: data.isCheckout === true };
 }
+
+/**
+ * Saves (inserts) the activated business profile into the Supabase `business_profiles` table.
+ * Called when the user clicks "Activate SaleConvo" in Step 7.
+ * Uses all 19 required columns as specified in the schema.
+ *
+ * @param state - The full wizard state at the moment of activation.
+ * @returns The inserted row data or throws on error.
+ */
+export async function saveBusinessProfile(state: WizardState): Promise<void> {
+  const { error } = await supabase.from('business_profiles').insert({
+    business_name: state.businessName,
+    business_category: state.businessCategory,
+    business_description: state.businessDescription,
+    business_website: state.businessWebsite || null,
+    instagram_page: state.instagramPage || null,
+    country: state.country,
+    city: state.city || null,
+    delivery_scope: state.deliveryScope,
+    delivery_time: state.deliveryTime,
+    delivery_fee: state.deliveryChargeType === 'Fixed delivery fee'
+      ? state.fixedDeliveryFee
+      : state.deliveryChargeType,
+    return_policy: state.acceptReturns ? state.returnPolicy : 'No returns accepted',
+    accepts_returns: state.acceptReturns,
+    payment_methods: state.paymentMethods,
+    products: state.products,
+    faqs: state.faqs,
+    agent_name: state.agentName || state.aiName || '',
+    tone_of_voice: state.tone,
+    response_style: state.responseStyle,
+    raw_wizard_state: state as unknown as Record<string, unknown>,
+  });
+
+  if (error) {
+    console.error('[saveBusinessProfile] Supabase insert error:', error);
+    throw new Error(error.message || 'Failed to save business profile');
+  }
+
+  console.log('[saveBusinessProfile] Business profile saved successfully for:', state.businessName);
+}

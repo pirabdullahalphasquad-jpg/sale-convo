@@ -25,6 +25,8 @@ export const Step3BusinessKnowledge: React.FC<Step3Props> = ({
   onNext,
   onBack,
 }) => {
+  const isValid = state.aboutBusiness.trim().length > 0 && state.faqs.length >= 1;
+
   const [showAddFaqModal, setShowAddFaqModal] = useState(false);
   const [newQuestion, setNewQuestion] = useState('');
   const [newAnswer, setNewAnswer] = useState('');
@@ -228,7 +230,7 @@ export const Step3BusinessKnowledge: React.FC<Step3Props> = ({
       </div>
 
       {/* Navigation Footer */}
-      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
         <button
           type="button"
           id="step3-back-btn"
@@ -239,15 +241,23 @@ export const Step3BusinessKnowledge: React.FC<Step3Props> = ({
           <span>Back</span>
         </button>
 
-        <button
-          type="button"
-          id="step3-continue-btn"
-          onClick={onNext}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
-        >
-          <span>Continue</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-        </button>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {!isValid && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+              Add your business description and at least 1 FAQ to continue.
+            </p>
+          )}
+          <button
+            type="button"
+            id="step3-continue-btn"
+            disabled={!isValid}
+            onClick={() => { if (isValid) onNext(); }}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
+          >
+            <span>Continue</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
       </div>
 
       {/* Add FAQ Modal */}

@@ -40,7 +40,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            {state.businessName || 'Urban Wear'} Operations Dashboard
+            {state.businessName || 'Your Business'} Operations Dashboard
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Your WhatsApp agent is actively handling inquiries and routing orders.

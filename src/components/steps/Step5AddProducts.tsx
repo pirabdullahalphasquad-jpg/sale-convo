@@ -335,7 +335,7 @@ export const Step5AddProducts: React.FC<Step5Props> = ({
       </div>
 
       {/* Navigation Footer */}
-      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
         <button
           type="button"
           id="step5-back-btn"
@@ -346,15 +346,23 @@ export const Step5AddProducts: React.FC<Step5Props> = ({
           <span>Back</span>
         </button>
 
-        <button
-          type="button"
-          id="step5-continue-btn"
-          onClick={onNext}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
-        >
-          <span>Continue</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-        </button>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {state.products.length === 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+              Add at least 1 product before continuing.
+            </p>
+          )}
+          <button
+            type="button"
+            id="step5-continue-btn"
+            disabled={state.products.length === 0}
+            onClick={() => { if (state.products.length > 0) onNext(); }}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
+          >
+            <span>Continue</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
       </div>
 
       {/* Add Product Modal */}

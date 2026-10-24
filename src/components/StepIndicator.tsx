@@ -53,17 +53,25 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
         {STEPS.map((item) => {
           const isActive = currentStep === item.step;
           const isCompleted = completedSteps.includes(item.step) || currentStep > item.step;
+          // Allow navigation only to current step, completed steps, or earlier steps
+          const canNavigate = item.step < currentStep || completedSteps.includes(item.step);
           const Icon = item.icon;
 
           return (
             <button
               key={item.step}
               type="button"
-              onClick={() => onSelectStep(item.step)}
-              className={`group flex flex-col items-center p-1.5 sm:p-2 rounded-xl transition-all text-center cursor-pointer ${
+              disabled={!canNavigate && !isActive}
+              onClick={() => {
+                if (canNavigate || isActive) onSelectStep(item.step);
+              }}
+              title={!canNavigate && !isActive ? 'Complete the current step first' : undefined}
+              className={`group flex flex-col items-center p-1.5 sm:p-2 rounded-xl transition-all text-center ${
                 isActive
-                  ? 'bg-emerald-50/80 ring-1 ring-emerald-500/30'
-                  : 'hover:bg-slate-50'
+                  ? 'bg-emerald-50/80 ring-1 ring-emerald-500/30 cursor-pointer'
+                  : canNavigate
+                  ? 'hover:bg-slate-50 cursor-pointer'
+                  : 'cursor-not-allowed opacity-50'
               }`}
             >
               <div

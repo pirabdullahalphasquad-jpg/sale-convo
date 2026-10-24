@@ -85,7 +85,7 @@ export const ActivationSuccess: React.FC<ActivationSuccessProps> = ({
           <div className="flex items-center gap-1.5">
             <ShoppingBag className="w-4 h-4 text-emerald-600" />
             <span className="text-base font-bold text-slate-900">
-              {state.products.length || 12}
+              {state.products.length}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">Live in AI Catalog</p>

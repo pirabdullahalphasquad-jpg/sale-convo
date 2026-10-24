@@ -3,15 +3,21 @@
  *
  * Handles Meta's WhatsApp Cloud API webhook:
  *   - GET  → Webhook verification handshake (hub.challenge)
- *   - POST → Incoming customer message events; extracts message string,
- *            generates an AI response via Gemini (gemini-3.8-flash),
- *            and replies via Meta Graph API v26.0.
+ *   - POST → Incoming customer message events; dynamically loads the latest
+ *            activated business profile from `business_profiles` table, builds
+ *            a Gemini system prompt from real data, and replies via Meta Graph API v26.0.
+ *
+ * Reliability safeguards:
+ *   1. Message ID deduplication (processedMessageIds Set)
+ *   2. Stale retry filter (>90s old messages are dropped)
+ *   3. EdgeRuntime.waitUntil() → instant 200 OK to Meta, background processing
  *
  * Deploy (Meta does not send a Supabase JWT, so JWT verification must be off):
  *   supabase functions deploy whatsapp-webhook --no-verify-jwt
  */
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ─── Message Deduplication Cache ──────────────────────────────────────────────
 const processedMessageIds = new Set<string>();
@@ -95,9 +101,117 @@ function getEnvConfig(): WebhookEnvConfig {
   };
 }
 
-// ─── System Prompt ────────────────────────────────────────────────────────────
+// ─── Business Profile Loader ──────────────────────────────────────────────────
 
-function buildSystemPrompt(): string {
+// deno-lint-ignore no-explicit-any
+type BusinessProfile = Record<string, any>;
+
+/**
+ * Fetches the most recently activated business profile from `business_profiles`.
+ * Returns null if table is empty or on error (fallback to hardcoded Urban Threads).
+ */
+async function fetchLatestBusinessProfile(): Promise<BusinessProfile | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseKey =
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn("[whatsapp-webhook] SUPABASE_URL or key not set — using fallback prompt.");
+    return null;
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await supabase
+      .from("business_profiles")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[whatsapp-webhook] Error fetching business_profiles:", error.message);
+      return null;
+    }
+
+    return data as BusinessProfile | null;
+  } catch (err) {
+    console.error("[whatsapp-webhook] Exception fetching business_profiles:", err);
+    return null;
+  }
+}
+
+// ─── System Prompt Builder ────────────────────────────────────────────────────
+
+function buildDynamicSystemPrompt(profile: BusinessProfile): string {
+  const name = profile.business_name || "Urban Threads";
+  const description = profile.business_description || "An online store across Pakistan.";
+  const agentName = profile.agent_name || "Sara";
+  const tone = profile.tone_of_voice || "Friendly & Helpful";
+  const responseStyle = profile.response_style || "Short & Direct";
+  const deliveryScope = profile.delivery_scope || "Nationwide";
+  const deliveryTime = profile.delivery_time || "2–5 business days";
+  const deliveryFee = profile.delivery_fee || "PKR 200";
+  const paymentMethods: string[] = Array.isArray(profile.payment_methods)
+    ? profile.payment_methods
+    : ["Cash on Delivery", "Bank Transfer"];
+  const acceptsReturns: boolean = profile.accepts_returns !== false;
+  const returnPolicy = profile.return_policy || "Returns accepted within 7 days.";
+
+  // deno-lint-ignore no-explicit-any
+  const products: any[] = Array.isArray(profile.products) ? profile.products : [];
+  // deno-lint-ignore no-explicit-any
+  const faqs: any[] = Array.isArray(profile.faqs) ? profile.faqs : [];
+
+  const productsCatalog =
+    products.length > 0
+      ? products
+          .map((p, i) => {
+            const sizes = Array.isArray(p.sizes) ? p.sizes.join(", ") : p.sizes || "Standard";
+            const colors =
+              Array.isArray(p.colors)
+                ? p.colors.join(", ")
+                : p.colors || p.variants || "Standard";
+            return `${i + 1}. ${p.name}\n   - Price: ${p.price}\n   - Sizes: ${sizes}\n   - Colors/Variants: ${colors}\n   - Description: ${p.description || ""}\n   - Availability: ${p.availability || "In Stock"}`;
+          })
+          .join("\n")
+      : "No products configured yet.";
+
+  const faqSection =
+    faqs.length > 0
+      ? faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")
+      : "No FAQs configured yet.";
+
+  return `You are ${agentName}, the AI sales assistant for ${name}.
+
+=== STORE IDENTITY & DETAILS ===
+- Brand: ${name}
+- Description: ${description}
+- Delivery Coverage: ${deliveryScope}
+- Delivery Timeline: ${deliveryTime}
+- Delivery Fee: ${deliveryFee}
+- Payment Methods: ${paymentMethods.join(", ")}
+- Returns: ${acceptsReturns ? `Yes — ${returnPolicy}` : "No returns accepted."}
+
+=== PRODUCT CATALOG ===
+${productsCatalog}
+
+=== FREQUENTLY ASKED QUESTIONS ===
+${faqSection}
+
+=== BEHAVIOR RULES ===
+- Tone of Voice: ${tone}
+- Response Style: ${responseStyle} (keep replies concise and natural for WhatsApp chat)
+- Languages: Reply naturally in English, Urdu, or Roman Urdu matching the customer's language.
+- Accuracy: Only use facts from the catalog and policies above. NEVER guess or invent products, prices, or policies.
+- Order placement: If the customer wants to buy, confirm the product, size/variant, recipient name, delivery address, and phone number.
+- Human handoff: If the customer insists on speaking to a manager or reports a severe complaint, politely assure them a human team member will contact them soon.`;
+}
+
+/**
+ * Fallback hardcoded Urban Threads prompt used ONLY when business_profiles table is empty.
+ */
+function buildFallbackSystemPrompt(): string {
   return `You are Sara, the friendly and helpful AI sales assistant for Urban Threads, an online fashion store offering premium casual clothing for men and women across Pakistan.
 
 === STORE IDENTITY & DETAILS ===
@@ -131,7 +245,7 @@ function buildSystemPrompt(): string {
 // ─── Gemini Generation ────────────────────────────────────────────────────────
 
 async function generateGeminiReply(apiKey: string, systemPrompt: string, userText: string): Promise<string> {
-  const models = ["gemini-3.8-flash", "gemini-flash-latest"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"];
   let lastError = "";
 
   for (const model of models) {
@@ -191,13 +305,14 @@ async function generateGeminiReply(apiKey: string, systemPrompt: string, userTex
   throw new Error(`Failed to generate reply with Gemini: ${lastError}`);
 }
 
-// ─── Incoming Message Processor ───────────────────────────────────────────────
+// ─── Incoming Message Handler ─────────────────────────────────────────────────
 
 /**
  * Handles an incoming WhatsApp message in the background:
- * 1. Validates environment secrets.
- * 2. Generates an AI response using Gemini.
- * 3. Sends the reply via Meta Graph API v26.0.
+ * 1. Fetches the latest business profile from Supabase.
+ * 2. Builds a dynamic Gemini system prompt from that profile.
+ * 3. Generates an AI response using Gemini.
+ * 4. Sends the reply via Meta Graph API v26.0.
  *
  * Designed to be called via EdgeRuntime.waitUntil() so that the HTTP 200 OK
  * is returned to Meta immediately, avoiding cold-start retry storms.
@@ -212,22 +327,34 @@ async function handleIncomingMessage(msg: IncomingMessageInfo): Promise<void> {
     );
   }
 
-  // 1. Log before calling Gemini
+  // 1. Dynamically fetch the latest business profile from Supabase
+  const profile = await fetchLatestBusinessProfile();
+  const systemPrompt = profile
+    ? buildDynamicSystemPrompt(profile)
+    : buildFallbackSystemPrompt();
+
+  if (profile) {
+    console.log(`[whatsapp-webhook] Using dynamic profile for: "${profile.business_name}"`);
+  } else {
+    console.log("[whatsapp-webhook] No profile found — using fallback Urban Threads prompt.");
+  }
+
+  // 2. Log before calling Gemini
   console.log("[whatsapp-webhook] Calling Gemini API to generate reply for message:", {
     from: msg.from,
     messageId: msg.messageId,
     text: msg.text,
   });
 
-  const rawAiReply = await generateGeminiReply(geminiApiKey, buildSystemPrompt(), msg.text);
+  const rawAiReply = await generateGeminiReply(geminiApiKey, systemPrompt, msg.text);
 
   // Clean any internal checkout markers if present
   const cleanReply = rawAiReply.replace(/\[\[CHECKOUT:[^\]]*\]\]/gi, "").trim();
 
-  // 2. Log after calling Gemini
+  // 3. Log after calling Gemini
   console.log("[whatsapp-webhook] Gemini generated reply successfully:", cleanReply);
 
-  // 3. Post reply to Meta Graph API v26.0
+  // 4. Post reply to Meta Graph API v26.0
   const graphUrl = `https://graph.facebook.com/v26.0/${targetPhoneNumberId}/messages`;
   const graphPayload = {
     messaging_product: "whatsapp",
@@ -265,7 +392,7 @@ async function handleIncomingMessage(msg: IncomingMessageInfo): Promise<void> {
     throw new Error(`Meta Graph API returned status ${graphRes.status}: ${graphResponseText}`);
   }
 
-  // 4. Log exact Graph API response
+  // 5. Log exact Graph API response
   console.log(
     `[whatsapp-webhook] Meta Graph API message sent successfully (status ${graphRes.status}):`,
     graphResponseText
