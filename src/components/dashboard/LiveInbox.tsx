@@ -82,7 +82,7 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
               id: c.id,
               name: c.customer_name || 'Customer',
               phone: c.customer_phone || '',
-              status: 'ai',
+              status: c.human_takeover ? 'human' : 'ai',
               unread: 0,
               messages: messages.length > 0 ? messages : [
                 {
@@ -139,10 +139,26 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   };
 
-  const toggleTakeover = () => {
+  const toggleTakeover = async () => {
     if (!active) return;
+    const newStatus = active.status === 'ai' ? 'human' : 'ai';
+    const isHuman = newStatus === 'human';
+
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ human_takeover: isHuman })
+        .eq('id', active.id);
+
+      if (error) {
+        console.error('Error updating human_takeover:', error);
+      }
+    } catch (err) {
+      console.error('Error updating human_takeover:', err);
+    }
+
     setConversations((prev) =>
-      prev.map((c) => (c.id === active.id ? { ...c, status: c.status === 'ai' ? 'human' : 'ai' } : c))
+      prev.map((c) => (c.id === active.id ? { ...c, status: newStatus } : c))
     );
   };
 
@@ -161,6 +177,16 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
 
       if (error) {
         console.error('Error inserting message:', error);
+      }
+
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('send-human-reply', {
+        body: { to: active.phone, text: text }
+      });
+
+      if (fnError) {
+        console.error('Failed to send human reply via edge function:', fnError);
+      } else {
+        console.log('Human reply sent successfully via edge function:', fnData);
       }
 
       const msg: InboxMessage = {

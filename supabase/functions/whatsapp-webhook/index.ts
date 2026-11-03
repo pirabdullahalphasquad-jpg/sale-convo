@@ -95,22 +95,59 @@ serve(async (req) => {
       3. Be short and direct.
     `
 
-    // 4. Call Gemini
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: messageText }] }],
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
-      })
-    })
+    // 4. Call Gemini with retry mechanism
+    let geminiData: any = null;
+    let success = false;
 
-    const geminiData = await geminiRes.json()
-    console.log("GEMINI API ERROR DETAILS:", JSON.stringify(geminiData))
-    
-    // Check if Gemini failed
-    if (!geminiData.candidates || !geminiData.candidates[0]?.content?.parts?.[0]?.text) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: "user", parts: [{ text: messageText }] }],
+            generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
+          })
+        })
+
+        if (!geminiRes.ok) {
+          console.error(`Gemini fetch error (attempt ${attempt}): status ${geminiRes.status}`)
+          if (attempt === 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            continue
+          } else {
+            break
+          }
+        }
+
+        geminiData = await geminiRes.json()
+        console.log("GEMINI API RESPONSE:", JSON.stringify(geminiData))
+
+        if (geminiData && geminiData.candidates) {
+          success = true
+          break
+        } else {
+          console.error(`Gemini response missing candidates (attempt ${attempt}):`, geminiData)
+          if (attempt === 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            continue
+          } else {
+            break
+          }
+        }
+      } catch (err) {
+        console.error(`Gemini fetch exception (attempt ${attempt}):`, err)
+        if (attempt === 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          continue
+        } else {
+          break
+        }
+      }
+    }
+
+    if (!success || !geminiData?.candidates || !geminiData.candidates[0]?.content?.parts?.[0]?.text) {
        console.error("Gemini Error:", geminiData)
        await sendWhatsAppMessage(customerPhone, "Maaf kijiyega, mujhe abhi samajh nahi aaya. Let me connect you with a human team member to help you right away!")
        return new Response('OK', { status: 200 })
