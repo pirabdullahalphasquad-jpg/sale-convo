@@ -52,6 +52,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   feedback?: 'good' | 'bad';
+  isCheckout?: boolean;
   productSnippet?: {
     name: string;
     price: string;
@@ -123,5 +124,5 @@ export interface WizardState {
   activatedAt?: string;
 }
 
-export type AppView = 'wizard' | 'landing' | 'dashboard' | 'inbox';
+export type AppView = 'wizard' | 'landing' | 'dashboard' | 'inbox' | 'orders';
 

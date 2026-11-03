@@ -33,8 +33,15 @@ export const Step1BusinessSetup: React.FC<Step1Props> = ({
   updateState,
   onNext,
 }) => {
+  const isValid =
+    state.businessName.trim().length > 0 &&
+    state.businessCategory !== '' &&
+    state.businessDescription.trim().length > 0 &&
+    (state.country || '').trim().length > 0;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValid) return;
     onNext();
   };
 
@@ -267,11 +274,17 @@ export const Step1BusinessSetup: React.FC<Step1Props> = ({
       </div>
 
       {/* Action footer */}
-      <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+        {!isValid && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg flex-1">
+            Please fill in Business Name, Category, Description, and Country to continue.
+          </p>
+        )}
         <button
           type="submit"
           id="step1-continue-btn"
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer group"
+          disabled={!isValid}
+          className={`ml-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 ${isValid ? 'cursor-pointer' : ''} group`}
         >
           <span>Continue</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />

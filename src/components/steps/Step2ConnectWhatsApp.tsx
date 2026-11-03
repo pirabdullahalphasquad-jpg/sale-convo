@@ -29,7 +29,7 @@ export const Step2ConnectWhatsApp: React.FC<Step2Props> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState(
-    state.whatsappPhoneNumber || '+92 300 8492019'
+    state.whatsappPhoneNumber || ''
   );
 
   const handleSimulateMetaConnect = () => {
@@ -246,8 +246,8 @@ export const Step2ConnectWhatsApp: React.FC<Step2Props> = ({
               onClick={() => setShowModal(true)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
             >
-              <span>Connect & Continue</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              <MessageCircle className="w-4 h-4" />
+              <span>Connect WhatsApp</span>
             </button>
           )}
         </div>
@@ -294,33 +294,18 @@ export const Step2ConnectWhatsApp: React.FC<Step2Props> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Select WhatsApp Business Number
+                <label htmlFor="wa-number-input" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Your WhatsApp Business Number <span className="text-emerald-600">*</span>
                 </label>
-                <div className="space-y-2">
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-emerald-500 bg-emerald-50/40 cursor-pointer">
-                    <div className="flex items-center gap-2.5">
-                      <input
-                        type="radio"
-                        name="phoneSelection"
-                        checked={selectedNumber === '+92 300 8492019'}
-                        onChange={() => setSelectedNumber('+92 300 8492019')}
-                        className="text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <div>
-                        <span className="font-semibold text-slate-900 text-xs block">
-                          +92 300 8492019
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          {state.businessName || 'Urban Threads'} Main Line (Verified)
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                      Available
-                    </span>
-                  </label>
-                </div>
+                <input
+                  id="wa-number-input"
+                  type="tel"
+                  value={selectedNumber}
+                  onChange={(e) => setSelectedNumber(e.target.value)}
+                  placeholder="e.g. +92 300 1234567"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Enter the number registered on your WhatsApp Business account.</p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60 text-[11px] text-slate-600 space-y-1.5">

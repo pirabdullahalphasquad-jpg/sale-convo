@@ -1,11 +1,12 @@
 import React from 'react';
-import { Bot, HelpCircle, ArrowRight, Home, Sparkles } from 'lucide-react';
+import { Bot, HelpCircle, Home, Sparkles, MessageSquare, ShoppingBag, BarChart3 } from 'lucide-react';
 import { AppView } from '../types';
 
 interface HeaderProps {
   currentView: AppView;
   onViewChange: (view: AppView) => void;
   currentStep: number;
+  isActivated?: boolean;
   onOpenHelp: () => void;
 }
 
@@ -13,8 +14,27 @@ export const Header: React.FC<HeaderProps> = ({
   currentView,
   onViewChange,
   currentStep,
+  isActivated = false,
   onOpenHelp,
 }) => {
+  const isPostActivation =
+    isActivated ||
+    currentStep === 8 ||
+    currentView === 'dashboard' ||
+    currentView === 'inbox' ||
+    currentView === 'orders';
+
+  const getBreadcrumbLabel = () => {
+    if (currentView === 'landing') return 'Overview';
+    if (currentView === 'dashboard') return 'Agent Dashboard';
+    if (currentView === 'inbox') return 'Live WhatsApp Inbox';
+    if (currentView === 'orders') return 'Orders Management';
+    if (currentView === 'wizard') {
+      return currentStep === 8 ? 'Agent Activated' : `Step ${currentStep} of 7`;
+    }
+    return 'Overview';
+  };
+
   return (
     <header
       id="app-header"
@@ -47,22 +67,17 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Onboarding</span>
             <span>/</span>
             <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-              {currentView === 'wizard'
-                ? `Step ${currentStep} of 7`
-                : currentView === 'landing'
-                ? 'Overview'
-                : currentView === 'dashboard'
-                ? 'Agent Dashboard'
-                : 'Live WhatsApp Inbox'}
+              {getBreadcrumbLabel()}
             </span>
           </div>
         </div>
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* View switcher buttons */}
+          {/* View switcher buttons pill */}
           <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200/60 text-xs font-medium">
             <button
+              type="button"
               id="nav-landing-btn"
               onClick={() => onViewChange('landing')}
               className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -74,7 +89,9 @@ export const Header: React.FC<HeaderProps> = ({
               <Home className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Product Story</span>
             </button>
+
             <button
+              type="button"
               id="nav-wizard-btn"
               onClick={() => onViewChange('wizard')}
               className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -86,9 +103,57 @@ export const Header: React.FC<HeaderProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Setup Wizard</span>
             </button>
+
+            {/* Post-activation navigation buttons */}
+            {isPostActivation && (
+              <>
+                <button
+                  type="button"
+                  id="nav-dashboard-btn"
+                  onClick={() => onViewChange('dashboard')}
+                  className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'dashboard'
+                      ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Dashboard</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="nav-inbox-btn"
+                  onClick={() => onViewChange('inbox')}
+                  className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'inbox'
+                      ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Live Inbox</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="nav-orders-btn"
+                  onClick={() => onViewChange('orders')}
+                  className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'orders'
+                      ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Orders</span>
+                </button>
+              </>
+            )}
           </div>
 
           <button
+            type="button"
             id="header-need-help-btn"
             onClick={onOpenHelp}
             className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"

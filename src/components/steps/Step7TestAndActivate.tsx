@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SUGGESTED_TEST_QUESTIONS } from '../../data/initialData';
 import { ChatMessage, WizardState } from '../../types';
-import { callChatTest } from '../../lib/chatApi';
+import { callChatTest, saveBusinessProfile, ChatHistoryMessage } from '../../lib/chatApi';
 import {
   ArrowLeft,
   Send,
@@ -54,8 +54,10 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     }
   }, [state.testChatMessages, isTyping, activeSubTab]);
 
-  const cleanPhone = (state.whatsappPhoneNumber || '+92 300 1234567').replace(/[^0-9]/g, '');
-  const whatsappTestUrl = `https://wa.me/${cleanPhone}?text=Hi%2C%20I%20have%20a%20question%20about%20your%20products`;
+  const liveBotNumber = '15556624608';
+  const agentName = state.agentName || 'Sara';
+  const whatsappTestUrl = `https://wa.me/${liveBotNumber}?text=${encodeURIComponent(`Hi ${agentName}, do you have cargo pants?`)}`;
+  const [qrLoaded, setQrLoaded] = useState(true);
 
   // Dynamic AI reply generator grounded in user's real business setup
   const generateAIResponse = (userQuestion: string): string => {
@@ -155,14 +157,31 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     setIsTyping(true);
 
     try {
+      // Recent conversation (before the current message) so follow-ups keep context
+      const history: ChatHistoryMessage[] = state.testChatMessages
+        .filter((m) => !m.text.startsWith('[AI Error]'))
+        .slice(-10)
+        .map((m) => ({
+          role: m.sender === 'customer' ? ('user' as const) : ('model' as const),
+          text: m.text,
+        }));
+
       // Call the real Gemini-backed Supabase Edge Function
-      const aiResponse = await callChatTest(query, state);
+      const aiResponse = await callChatTest(query, state, history);
+
+      // Show the checkout button only if the server flagged it AND the reply
+      // actually names a product from the store catalog.
+      const replyLower = aiResponse.reply.toLowerCase();
+      const mentionsCatalogProduct = state.products.some(
+        (p) => p.name && replyLower.includes(p.name.trim().toLowerCase())
+      );
 
       const aiMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
-        text: aiResponse,
+        text: aiResponse.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isCheckout: aiResponse.isCheckout && mentionsCatalogProduct,
       };
 
       updateState({
@@ -221,8 +240,15 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
     });
   };
 
-  const handleActivateSaleConvo = () => {
+  const handleActivateSaleConvo = async () => {
     setIsActivating(true);
+    try {
+      // Persist wizard data to Supabase business_profiles table
+      await saveBusinessProfile(state);
+    } catch (err) {
+      console.error('[Step7] saveBusinessProfile failed (non-fatal):', err);
+      // Non-fatal: continue with activation even if save fails
+    }
     setTimeout(() => {
       setIsActivating(false);
       setIsActivatedLocal(true);
@@ -421,6 +447,19 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
                         </div>
                       </div>
 
+                      {/* Checkout action directly under the bubble */}
+                      {msg.isCheckout && (
+                        <button
+                          type="button"
+                          id={`confirm-order-${msg.id}`}
+                          onClick={() => alert('Redirecting to WhatsApp to confirm order...')}
+                          className="mt-2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-md transition-all cursor-pointer"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Confirm Order via WhatsApp</span>
+                        </button>
+                      )}
+
                       {/* Feedback Section for AI messages */}
                       {!isCustomer && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 pl-1">
@@ -601,10 +640,21 @@ export const Step7TestAndActivate: React.FC<Step7Props> = ({
                   </div>
                 </div>
 
-                {/* Simulated Clean QR Code */}
+                {/* Real Scannable QR Code */}
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-col items-center shrink-0">
-                  <div className="w-24 h-24 bg-slate-900 rounded-lg p-1.5 flex items-center justify-center text-white">
-                    <QrCode className="w-full h-full text-white" />
+                  <div className="w-24 h-24 bg-white rounded-lg p-1 flex items-center justify-center border border-slate-100 overflow-hidden">
+                    {qrLoaded ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(whatsappTestUrl)}`}
+                        alt="Scan to test on WhatsApp"
+                        className="w-full h-full object-contain"
+                        onError={() => setQrLoaded(false)}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-slate-900 rounded p-1.5 flex items-center justify-center text-white">
+                        <QrCode className="w-full h-full text-white" />
+                      </div>
+                    )}
                   </div>
                   <span className="text-[10px] font-semibold text-slate-500 mt-1.5">
                     Scan to test

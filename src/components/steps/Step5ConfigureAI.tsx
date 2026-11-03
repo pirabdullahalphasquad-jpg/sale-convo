@@ -93,6 +93,8 @@ export const Step5ConfigureAI: React.FC<Step6Props> = ({
   onNext,
   onBack,
 }) => {
+  const isValid = (state.agentName || '').trim().length > 0;
+
   const toggleHandoff = (trigger: string) => {
     if (state.humanHandoffTriggers.includes(trigger)) {
       updateState({
@@ -396,7 +398,7 @@ export const Step5ConfigureAI: React.FC<Step6Props> = ({
       </div>
 
       {/* Navigation Footer */}
-      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
         <button
           type="button"
           id="step6-back-btn"
@@ -407,15 +409,23 @@ export const Step5ConfigureAI: React.FC<Step6Props> = ({
           <span>Back</span>
         </button>
 
-        <button
-          type="button"
-          id="step6-continue-btn"
-          onClick={onNext}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
-        >
-          <span>Continue to Test AI</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-        </button>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {!isValid && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+              Please give your AI agent a name to continue.
+            </p>
+          )}
+          <button
+            type="button"
+            id="step6-continue-btn"
+            disabled={!isValid}
+            onClick={() => { if (isValid) onNext(); }}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 text-sm cursor-pointer group"
+          >
+            <span>Continue to Test AI</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
       </div>
     </div>
   );

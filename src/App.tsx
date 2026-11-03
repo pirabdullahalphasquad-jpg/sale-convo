@@ -21,6 +21,8 @@ import { LandingPage } from './components/LandingPage';
 import { DashboardView } from './components/DashboardView';
 import { LiveInboxModal } from './components/LiveInboxModal';
 import { HelpModal } from './components/HelpModal';
+import { LiveInbox } from './components/dashboard/LiveInbox';
+import { OrderManagement } from './components/dashboard/OrderManagement';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('wizard');
@@ -64,15 +66,27 @@ export default function App() {
   const handleActivateAgent = () => {
     setWizardState((prev) => ({
       ...prev,
-      currentStep: 8, // Success screen state
       isActivated: true,
+      currentStep: 8,
       completedSteps: [1, 2, 3, 4, 5, 6, 7],
     }));
+    setCurrentView('wizard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleGoToDashboard = () => {
     setCurrentView('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenInbox = () => {
+    setCurrentView('inbox');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenOrders = () => {
+    setCurrentView('orders');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleResetSetup = () => {
@@ -81,6 +95,7 @@ export default function App() {
       currentStep: 1,
     }));
     setCurrentView('wizard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -88,8 +103,12 @@ export default function App() {
       {/* Top Application Header */}
       <Header
         currentView={currentView}
-        onViewChange={(view) => setCurrentView(view)}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         currentStep={wizardState.currentStep}
+        isActivated={wizardState.isActivated}
         onOpenHelp={() => setShowHelpModal(true)}
       />
 
@@ -105,7 +124,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 2: Post-Activation Dashboard */}
+        {/* VIEW 2: Post-Activation Operations Dashboard */}
         {currentView === 'dashboard' && (
           <DashboardView
             state={wizardState}
@@ -113,11 +132,26 @@ export default function App() {
               handleJumpToStep(step);
               setCurrentView('wizard');
             }}
-            onOpenInbox={() => setShowInboxModal(true)}
+            onOpenInbox={handleOpenInbox}
+            onOpenOrders={handleOpenOrders}
           />
         )}
 
-        {/* VIEW 3: Clean Minimal 7-Step Wizard Flow */}
+        {/* VIEW 3: Live WhatsApp Inbox (Full Page with Human Takeover) */}
+        {currentView === 'inbox' && (
+          <div className="space-y-6">
+            <LiveInbox state={wizardState} />
+          </div>
+        )}
+
+        {/* VIEW 4: Order Management (Full Page) */}
+        {currentView === 'orders' && (
+          <div className="space-y-6">
+            <OrderManagement />
+          </div>
+        )}
+
+        {/* VIEW 5: Clean Minimal 7-Step Wizard Flow */}
         {currentView === 'wizard' && (
           <div>
             {/* Step Progress Indicator (Steps 1-7) */}
@@ -134,7 +168,7 @@ export default function App() {
               <ActivationSuccess
                 state={wizardState}
                 onGoToDashboard={handleGoToDashboard}
-                onOpenInbox={() => setShowInboxModal(true)}
+                onOpenInbox={handleOpenInbox}
                 onResetSetup={handleResetSetup}
               />
             ) : (
@@ -209,7 +243,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Right: AI Employee Summary Card (Inspired by reference summary card) */}
+                {/* Right: AI Employee Summary Card */}
                 <div className="lg:col-span-4">
                   <AISummaryCard state={wizardState} />
                 </div>
@@ -233,7 +267,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Live Inbox Modal */}
+      {/* Live Inbox Modal (kept for quick drawer preview if triggered) */}
       {showInboxModal && (
         <LiveInboxModal
           state={wizardState}
