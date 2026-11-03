@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { WizardState } from '../types';
+import { supabase } from '../lib/chatApi';
 import {
   MessageCircle,
   Search,
@@ -37,315 +38,353 @@ interface Thread {
   }>;
 }
 
-export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => {
-  const [threads, setThreads] = useState<Thread[]>([
-    {
-      id: 't-1',
-      name: 'Ali Khan',
-      phone: '+92 301 5592812',
-      avatarColor: 'bg-emerald-600',
-      lastMessage: 'I would like to order the Premium Oversized T-Shirt in size L.',
-      time: '11:20 AM',
-      unreadCount: 0,
-      messages: [
-        {
-          id: 'm1',
-          sender: 'customer',
-          text: 'Hi, is this shirt available in black?',
-          time: '11:18 AM',
-        },
-        {
-          id: 'm2',
-          sender: 'ai',
-          text: 'Yes! The Premium Oversized T-Shirt is available in Black. We currently have sizes S, M, L and XL. Would you like to place an order?',
-          time: '11:18 AM',
-        },
-        {
-          id: 'm3',
-          sender: 'customer',
-          text: 'I would like to order the Premium Oversized T-Shirt in size L. Can you deliver to Lahore with Cash on Delivery?',
-          time: '11:20 AM',
-        },
-        {
-          id: 'm4',
-          sender: 'ai',
-          text: 'Absolutely! We offer Cash on Delivery across Pakistan. Please provide your full delivery address and contact number to confirm the booking for Rs. 2,499.',
-          time: '11:20 AM',
-        },
-      ],
-    },
-    {
-      id: 't-2',
-      name: 'Zoya Fatima',
-      phone: '+92 321 8840192',
-      avatarColor: 'bg-indigo-600',
-      lastMessage: 'Delivery charges kitnay hain?',
-      time: '10:45 AM',
-      unreadCount: 1,
-      messages: [
-        {
-          id: 'm21',
-          sender: 'customer',
-          text: 'Delivery charges kitnay hain?',
-          time: '10:45 AM',
-        },
-        {
-          id: 'm22',
-          sender: 'ai',
-          text: 'Delivery standard charges Rs. 250 hain, aur Rs. 4,500 se ooper k orders pe free shipping milti hai!',
-          time: '10:45 AM',
-        },
-      ],
-    },
-    {
-      id: 't-3',
-      name: 'Hamza Malik',
-      phone: '+92 333 4102983',
-      avatarColor: 'bg-amber-600',
-      lastMessage: 'I want to speak with a human manager regarding wholesale discount.',
-      time: '09:15 AM',
-      unreadCount: 0,
-      isHumanHandedOff: true,
-      messages: [
-        {
-          id: 'm31',
-          sender: 'customer',
-          text: 'I want to place a custom order for 200 shirts.',
-          time: '09:12 AM',
-        },
-        {
-          id: 'm32',
-          sender: 'ai',
-          text: 'I am immediately transferring you to our wholesale team manager. A team member will reply here shortly!',
-          time: '09:12 AM',
-        },
-      ],
-    },
-  ]);
+const nowTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const [activeThreadId, setActiveThreadId] = useState<string>('t-1');
+export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => {
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string>('');
   const [replyText, setReplyText] = useState('');
   const [takeOverMode, setTakeOverMode] = useState(false);
 
+  useEffect(() => {
+    async function fetchModalInbox() {
+      try {
+        const { data: convs, error: convError } = await supabase
+          .from('conversations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (convError) {
+          console.error('Error fetching conversations:', convError);
+          return;
+        }
+
+        if (!convs || convs.length === 0) {
+          setThreads([]);
+          return;
+        }
+
+        const loadedThreads: Thread[] = await Promise.all(
+          convs.map(async (c, index) => {
+            const { data: msgs, error: msgError } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('conversation_id', c.id)
+              .order('created_at', { ascending: true });
+
+            if (msgError) {
+              console.error('Error fetching messages:', msgError);
+            }
+
+            const messages = (msgs || []).map((m: any) => {
+              const timeStr = m.created_at
+                ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : nowTime();
+              return {
+                id: m.id,
+                sender: m.sender || (m.direction === 'inbound' ? 'customer' : 'ai'),
+                text: m.body || '',
+                time: timeStr,
+              };
+            });
+
+            const lastMsg = messages[messages.length - 1]?.text || 'No messages';
+            const lastTime = messages[messages.length - 1]?.time || nowTime();
+            const avatarColors = ['bg-emerald-600', 'bg-indigo-600', 'bg-amber-600', 'bg-purple-600', 'bg-blue-600'];
+
+            return {
+              id: c.id,
+              name: c.customer_name || 'Customer',
+              phone: c.customer_phone || '',
+              avatarColor: avatarColors[index % avatarColors.length],
+              lastMessage: lastMsg,
+              time: lastTime,
+              unreadCount: 0,
+              isHumanHandedOff: false,
+              messages: messages.length > 0 ? messages : [
+                {
+                  id: 'init',
+                  sender: 'ai',
+                  text: 'Conversation initialized.',
+                  time: nowTime(),
+                }
+              ],
+            };
+          })
+        );
+
+        setThreads(loadedThreads);
+        setActiveThreadId((prev) => (prev && loadedThreads.some(t => t.id === prev) ? prev : loadedThreads[0]?.id || ''));
+      } catch (err) {
+        console.error('Failed to load modal inbox:', err);
+      }
+    }
+
+    fetchModalInbox();
+
+    const channel = supabase
+      .channel('public:modal_conversations_messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
+        fetchModalInbox();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        fetchModalInbox();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
 
-  const handleSendReply = (e: React.FormEvent) => {
+  const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyText.trim()) return;
+    if (!replyText.trim() || !activeThread) return;
 
-    const newMsg = {
-      id: `m-${Date.now()}`,
-      sender: takeOverMode ? ('human' as const) : ('ai' as const),
-      text: replyText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+    const text = replyText.trim();
+    const sender = takeOverMode ? ('human' as const) : ('ai' as const);
 
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === activeThread.id
-          ? {
-              ...t,
-              messages: [...t.messages, newMsg],
-              lastMessage: replyText.trim(),
-            }
-          : t
-      )
-    );
-    setReplyText('');
+    try {
+      const { data, error } = await supabase.from('messages').insert([{
+        conversation_id: activeThread.id,
+        direction: 'outbound',
+        sender,
+        body: text,
+      }]).select('*').single();
+
+      if (error) {
+        console.error('Error sending reply:', error);
+      }
+
+      const newMsg = {
+        id: data?.id || `m-${Date.now()}`,
+        sender,
+        text,
+        time: nowTime(),
+      };
+
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === activeThread.id
+            ? {
+                ...t,
+                messages: [...t.messages, newMsg],
+                lastMessage: text,
+                time: nowTime(),
+              }
+            : t
+        )
+      );
+      setReplyText('');
+    } catch (err) {
+      console.error('Error in handleSendReply:', err);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
-      <div className="bg-white rounded-2xl w-full max-w-5xl h-[85vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
-        {/* Top Header */}
-        <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center font-bold text-sm">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
               <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <span>WhatsApp Live Business Inbox</span>
-                <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                  Meta Official API Connected
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-base">WhatsApp Live Business Inbox</h2>
+                <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Webhook Connected
                 </span>
-              </h3>
+              </div>
               <p className="text-xs text-slate-400">
-                {state.businessName || 'Urban Wear'} • AI Auto-Responder Active
+                Real-time customer conversations for {state.businessName || 'Your Business'} via Supabase & WhatsApp Cloud API
               </p>
             </div>
           </div>
-
           <button
-            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+            className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Body Split View */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Threads List Sidebar */}
-          <div className="w-80 border-r border-slate-200 bg-slate-50 flex flex-col shrink-0">
-            <div className="p-3 border-b border-slate-200 bg-white">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  placeholder="Search WhatsApp chats..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-100 rounded-lg border border-transparent focus:bg-white focus:border-slate-300 focus:outline-none"
-                />
+        {/* Content area */}
+        {!activeThread ? (
+          <div className="flex-1 flex items-center justify-center p-8 text-slate-400 text-sm">
+            No conversations found in the database. Send a message to your WhatsApp webhook to start chatting.
+          </div>
+        ) : (
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Sidebar: Threads */}
+            <div className="w-80 border-r border-slate-200 flex flex-col bg-slate-50/50 shrink-0">
+              <div className="p-3 border-b border-slate-200 bg-white">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-              {threads.map((thread) => {
-                const isSelected = thread.id === activeThread.id;
-                return (
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                {threads.map((thread) => (
                   <button
                     key={thread.id}
-                    onClick={() => setActiveThreadId(thread.id)}
-                    className={`w-full p-3.5 text-left flex items-start gap-3 transition-colors cursor-pointer ${
-                      isSelected ? 'bg-white shadow-2xs border-l-4 border-emerald-600' : 'hover:bg-slate-100/70'
+                    onClick={() => {
+                      setActiveThreadId(thread.id);
+                      setThreads((prev) =>
+                        prev.map((t) => (t.id === thread.id ? { ...t, unreadCount: 0 } : t))
+                      );
+                    }}
+                    className={`w-full text-left p-3.5 flex items-start gap-3 transition-colors cursor-pointer ${
+                      thread.id === activeThread.id ? 'bg-emerald-50/80 border-l-4 border-emerald-600' : 'hover:bg-slate-100/60'
                     }`}
                   >
-                    <div
-                      className={`w-9 h-9 rounded-full ${thread.avatarColor} text-white font-bold text-xs flex items-center justify-center shrink-0`}
-                    >
-                      {thread.name.substring(0, 2).toUpperCase()}
+                    <div className={`w-10 h-10 rounded-full ${thread.avatarColor} text-white font-bold flex items-center justify-center shrink-0`}>
+                      {thread.name[0]}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-bold text-xs text-slate-900 truncate">
-                          {thread.name}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{thread.time}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-semibold text-xs text-slate-900 truncate">{thread.name}</span>
+                        <span className="text-[10px] text-slate-400 shrink-0">{thread.time}</span>
                       </div>
-                      <p className="text-xs text-slate-500 truncate">{thread.lastMessage}</p>
+                      <div className="text-[11px] text-slate-500">{thread.phone}</div>
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
+                        <p className="text-[11px] text-slate-600 truncate">{thread.lastMessage}</p>
+                        {thread.unreadCount > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                            {thread.unreadCount}
+                          </span>
+                        )}
+                      </div>
                       {thread.isHumanHandedOff && (
-                        <span className="inline-block mt-1 text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">
-                          Human Handled
+                        <span className="inline-block mt-1 bg-amber-50 text-amber-700 text-[9px] font-semibold px-1.5 py-0.5 rounded border border-amber-200">
+                          Human Handover
                         </span>
                       )}
                     </div>
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Active Chat Conversation Area */}
-          <div className="flex-1 flex flex-col bg-[#efeae2]/30">
-            {/* Conversation Header */}
-            <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-9 h-9 rounded-full ${activeThread.avatarColor} text-white font-bold text-xs flex items-center justify-center`}
-                >
-                  {activeThread.name.substring(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-2">
-                    {activeThread.name}
-                    <span className="text-[11px] font-normal text-slate-500 font-mono">
-                      {activeThread.phone}
-                    </span>
-                  </h4>
-                  <div className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    AI Agent Active ({state.tone} tone)
+            {/* Right Chat Area */}
+            <div className="flex-1 flex flex-col bg-[#efeae2]/40 min-w-0">
+              {/* Chat Header */}
+              <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-full ${activeThread.avatarColor} text-white font-bold flex items-center justify-center shrink-0`}>
+                    {activeThread.name[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-slate-900 truncate">{activeThread.name}</h3>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {activeThread.phone} • WhatsApp Customer
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              {/* Human Takeover Toggle */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTakeOverMode(!takeOverMode)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                    takeOverMode
-                      ? 'bg-amber-100 text-amber-800 border-amber-300'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>{takeOverMode ? 'Human Mode Active' : 'Take Over Chat'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="flex-1 p-5 overflow-y-auto space-y-3.5">
-              {activeThread.messages.map((m) => {
-                const isCustomer = m.sender === 'customer';
-                const isHuman = m.sender === 'human';
-
-                return (
-                  <div
-                    key={m.id}
-                    className={`flex flex-col ${isCustomer ? 'items-start' : 'items-end'}`}
-                  >
-                    <div
-                      className={`max-w-md rounded-2xl p-3.5 text-xs shadow-2xs leading-relaxed ${
-                        isCustomer
-                          ? 'bg-white text-slate-900 rounded-tl-xs border border-slate-200'
-                          : isHuman
-                          ? 'bg-amber-600 text-white rounded-tr-xs'
-                          : 'bg-emerald-700 text-white rounded-tr-xs'
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setTakeOverMode(false)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        !takeOverMode ? 'bg-white text-emerald-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <div className="text-[10px] font-semibold opacity-75 mb-1 flex items-center gap-1">
-                        {isCustomer ? (
-                          'Customer'
-                        ) : isHuman ? (
-                          'Store Manager (Human)'
-                        ) : (
-                          <>
-                            <Bot className="w-3 h-3 inline" />
-                            <span>AI Employee</span>
-                          </>
-                        )}
-                      </div>
-                      {m.text}
-                      <div className="text-[10px] opacity-70 text-right mt-1 flex items-center justify-end gap-1">
-                        <span>{m.time}</span>
-                        {!isCustomer && <CheckCheck className="w-3 h-3" />}
+                      <Bot className="w-3.5 h-3.5 inline mr-1" /> AI Active ({state.agentName || 'Sara'})
+                    </button>
+                    <button
+                      onClick={() => setTakeOverMode(true)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        takeOverMode ? 'bg-white text-amber-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Human Takeover
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {takeOverMode && (
+                <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 flex items-center justify-between shrink-0">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <UserCheck className="w-4 h-4 text-amber-600" /> You are manually replying as a human agent. AI is paused for this thread.
+                  </span>
+                  <button
+                    onClick={() => setTakeOverMode(false)}
+                    className="text-xs underline font-semibold text-amber-900 hover:text-amber-950 cursor-pointer"
+                  >
+                    Return to AI Mode
+                  </button>
+                </div>
+              )}
+
+              {/* Messages Stream */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {activeThread.messages.map((msg) => {
+                  const isCustomer = msg.sender === 'customer';
+                  return (
+                    <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
+                      <div
+                        className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-xs shadow-xs ${
+                          isCustomer
+                            ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-xs'
+                            : msg.sender === 'ai'
+                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-tr-xs'
+                            : 'bg-amber-50 border border-amber-200 text-amber-950 rounded-tr-xs'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold text-[10px] mb-1 opacity-70">
+                          {isCustomer ? (
+                            <><User className="w-3 h-3" /> {activeThread.name}</>
+                          ) : msg.sender === 'ai' ? (
+                            <><Bot className="w-3 h-3" /> {state.agentName || 'Sara'} (AI Assistant)</>
+                          ) : (
+                            <><UserCheck className="w-3 h-3" /> You (Merchant)</>
+                          )}
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                        <div className="flex items-center justify-end gap-1 text-[9px] text-slate-400 mt-1">
+                          {msg.time}
+                          {!isCustomer && <CheckCheck className="w-3 h-3 text-emerald-600" />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
 
-            {/* Message Bar */}
-            <form
-              onSubmit={handleSendReply}
-              className="bg-white border-t border-slate-200 p-3 flex items-center gap-2"
-            >
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={
-                  takeOverMode
-                    ? 'Reply manually as store team member...'
-                    : 'Simulate AI reply or type response...'
-                }
-                className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-              />
-              <button
-                type="submit"
-                disabled={!replyText.trim()}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white p-2.5 rounded-xl cursor-pointer"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
+              {/* Reply Input Bar */}
+              <form onSubmit={handleSendReply} className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={
+                    takeOverMode
+                      ? 'Type a reply as a human agent...'
+                      : 'Switch to "Human Takeover" above to reply manually, or let AI handle...'
+                  }
+                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!replyText.trim()}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-medium text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" /> Send
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
