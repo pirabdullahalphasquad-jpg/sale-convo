@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Hand, Search, Send, User, UserCog } from 'lucide-react';
 import { WizardState } from '../../types';
+import { supabase } from '../../lib/chatApi';
 
 type Sender = 'customer' | 'ai' | 'human';
 type ChatStatus = 'ai' | 'human';
@@ -21,51 +22,6 @@ interface Conversation {
   messages: InboxMessage[];
 }
 
-const SEED_CONVERSATIONS: Conversation[] = [
-  {
-    id: 'c1',
-    name: 'Tariq Khan',
-    phone: '+92 300 4455667',
-    status: 'ai',
-    unread: 2,
-    messages: [
-      { id: 'm1', sender: 'customer', text: 'Assalam o Alaikum, do you deliver to Lahore?', time: '10:12 AM' },
-      { id: 'm2', sender: 'ai', text: 'Walaikum Assalam Tariq! Yes, we deliver nationwide including Lahore. Delivery takes 2–5 business days.', time: '10:12 AM' },
-      { id: 'm3', sender: 'customer', text: 'What is the delivery charge?', time: '10:14 AM' },
-      { id: 'm4', sender: 'customer', text: 'And can I pay on delivery?', time: '10:14 AM' },
-    ],
-  },
-  {
-    id: 'c2',
-    name: 'Hamza Ali',
-    phone: '+92 321 9988776',
-    status: 'human',
-    unread: 0,
-    messages: [
-      { id: 'm1', sender: 'customer', text: 'Do you have the cargo pants in size 34?', time: '09:30 AM' },
-      { id: 'm2', sender: 'ai', text: 'Our cargo pants are available in 30, 32, 36 and 38. I will check with the team about size 34.', time: '09:31 AM' },
-      { id: 'm3', sender: 'human', text: 'Hi Hamza, this is the store owner. Size 34 arrives on Friday — want me to reserve one?', time: '09:40 AM' },
-    ],
-  },
-  {
-    id: 'c3',
-    name: 'Ayesha Malik',
-    phone: '+92 333 1122334',
-    status: 'ai',
-    unread: 1,
-    messages: [
-      { id: 'm1', sender: 'customer', text: 'I want to buy the Premium Cotton T-Shirt', time: '11:05 AM' },
-      {
-        id: 'm2',
-        sender: 'ai',
-        text: 'Great! Here is your order summary:\n• 1x Premium Cotton T-Shirt — PKR 2,499\n• Standard Delivery — PKR 200\n\nTotal: PKR 2,699. Tap below to confirm:',
-        time: '11:05 AM',
-      },
-      { id: 'm3', sender: 'customer', text: 'Confirmed, please deliver to DHA Phase 5.', time: '11:07 AM' },
-    ],
-  },
-];
-
 const nowTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 interface LiveInboxProps {
@@ -74,11 +30,95 @@ interface LiveInboxProps {
 
 export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
   const agentName = state.agentName || 'Sara';
-  const [conversations, setConversations] = useState<Conversation[]>(SEED_CONVERSATIONS);
-  const [activeId, setActiveId] = useState<string>(SEED_CONVERSATIONS[0].id);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [reply, setReply] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function fetchInbox() {
+      try {
+        const { data: convs, error: convError } = await supabase
+          .from('conversations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (convError) {
+          console.error('Error fetching conversations:', convError);
+          return;
+        }
+
+        if (!convs || convs.length === 0) {
+          setConversations([]);
+          return;
+        }
+
+        const loaded: Conversation[] = await Promise.all(
+          convs.map(async (c) => {
+            const { data: msgs, error: msgError } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('conversation_id', c.id)
+              .order('created_at', { ascending: true });
+
+            if (msgError) {
+              console.error('Error fetching messages:', msgError);
+            }
+
+            const messages: InboxMessage[] = (msgs || []).map((m: any) => {
+              const timeStr = m.created_at
+                ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : nowTime();
+              return {
+                id: m.id,
+                sender: m.sender || (m.direction === 'inbound' ? 'customer' : 'ai'),
+                text: m.body || '',
+                time: timeStr,
+              };
+            });
+
+            return {
+              id: c.id,
+              name: c.customer_name || 'Customer',
+              phone: c.customer_phone || '',
+              status: 'ai',
+              unread: 0,
+              messages: messages.length > 0 ? messages : [
+                {
+                  id: 'init',
+                  sender: 'ai',
+                  text: 'Conversation initialized.',
+                  time: nowTime(),
+                }
+              ],
+            };
+          })
+        );
+
+        setConversations(loaded);
+        setActiveId((prev) => (prev && loaded.some(c => c.id === prev) ? prev : loaded[0]?.id || ''));
+      } catch (err) {
+        console.error('Failed to load inbox:', err);
+      }
+    }
+
+    fetchInbox();
+
+    const channel = supabase
+      .channel('public:conversations_and_messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
+        fetchInbox();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        fetchInbox();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const active = conversations.find((c) => c.id === activeId) ?? conversations[0];
 
@@ -92,7 +132,7 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [active.messages.length, activeId]);
+  }, [active?.messages?.length, activeId]);
 
   const selectConversation = (id: string) => {
     setActiveId(id);
@@ -100,21 +140,74 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
   };
 
   const toggleTakeover = () => {
+    if (!active) return;
     setConversations((prev) =>
       prev.map((c) => (c.id === active.id ? { ...c, status: c.status === 'ai' ? 'human' : 'ai' } : c))
     );
   };
 
-  const sendReply = (e: React.FormEvent) => {
+  const sendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = reply.trim();
-    if (!text || active.status !== 'human') return;
-    const msg: InboxMessage = { id: `m-${Date.now()}`, sender: 'human', text, time: nowTime() };
-    setConversations((prev) =>
-      prev.map((c) => (c.id === active.id ? { ...c, messages: [...c.messages, msg] } : c))
-    );
-    setReply('');
+    if (!text || !active || active.status !== 'human') return;
+
+    try {
+      const { data, error } = await supabase.from('messages').insert([{
+        conversation_id: active.id,
+        direction: 'outbound',
+        sender: 'human',
+        body: text,
+      }]).select('*').single();
+
+      if (error) {
+        console.error('Error inserting message:', error);
+      }
+
+      const msg: InboxMessage = {
+        id: data?.id || `m-${Date.now()}`,
+        sender: 'human',
+        text,
+        time: nowTime(),
+      };
+
+      setConversations((prev) =>
+        prev.map((c) => (c.id === active.id ? { ...c, messages: [...c.messages, msg] } : c))
+      );
+      setReply('');
+    } catch (err) {
+      console.error('Error sending reply:', err);
+    }
   };
+
+  if (!active) {
+    return (
+      <div
+        id="live-inbox"
+        className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[640px]"
+      >
+        <aside className="md:col-span-4 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col min-h-0">
+          <div className="p-3 border-b border-slate-100">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                id="inbox-search"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or phone"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+              />
+            </div>
+          </div>
+          <div className="p-8 text-center text-sm text-slate-400">No conversations found in database.</div>
+        </aside>
+        <section className="md:col-span-8 flex flex-col items-center justify-center bg-[#efeae2]/60 text-slate-400 text-sm p-6">
+          <p>No active conversation selected.</p>
+          <p className="text-xs text-slate-500 mt-1">Incoming WhatsApp messages will appear here automatically.</p>
+        </section>
+      </div>
+    );
+  }
 
   const isHuman = active.status === 'human';
   const lastMsg = (c: Conversation) => c.messages[c.messages.length - 1];
@@ -162,15 +255,15 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-sm text-slate-900 truncate">{c.name}</span>
-                      <span className="text-[10px] text-slate-400 shrink-0">{last.time}</span>
+                      <span className="text-[10px] text-slate-400 shrink-0">{last?.time || ''}</span>
                     </div>
                     <div className="text-[11px] text-slate-500">{c.phone}</div>
                     <div className="flex items-center justify-between gap-2 mt-0.5">
                       <p className="text-xs text-slate-600 truncate">
-                        {last.sender !== 'customer' && (
+                        {last && last.sender !== 'customer' && (
                           <span className="text-slate-400">{last.sender === 'ai' ? `${agentName}: ` : 'You: '}</span>
                         )}
-                        {last.text.replace(/\n/g, ' ')}
+                        {last?.text ? last.text.replace(/\n/g, ' ') : 'No messages'}
                       </p>
                       {c.unread > 0 && (
                         <span className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
@@ -197,7 +290,6 @@ export const LiveInbox: React.FC<LiveInboxProps> = ({ state }) => {
 
       {/* Right: chat window */}
       <section className="md:col-span-8 flex flex-col min-h-0 bg-[#efeae2]/60">
-        {/* Header */}
         <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center shrink-0">
