@@ -100,7 +100,7 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
               lastMessage: lastMsg,
               time: lastTime,
               unreadCount: 0,
-              isHumanHandedOff: false,
+              isHumanHandedOff: !!c.human_takeover,
               messages: messages.length > 0 ? messages : [
                 {
                   id: 'init',
@@ -114,7 +114,11 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
         );
 
         setThreads(loadedThreads);
-        setActiveThreadId((prev) => (prev && loadedThreads.some(t => t.id === prev) ? prev : loadedThreads[0]?.id || ''));
+        const firstThread = loadedThreads[0];
+        setActiveThreadId((prev) => (prev && loadedThreads.some(t => t.id === prev) ? prev : firstThread?.id || ''));
+        if (firstThread) {
+          setTakeOverMode(firstThread.isHumanHandedOff || false);
+        }
       } catch (err) {
         console.error('Failed to load modal inbox:', err);
       }
@@ -139,6 +143,27 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
 
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
 
+  const toggleTakeover = async (isHuman: boolean) => {
+    if (!activeThread) return;
+    setTakeOverMode(isHuman);
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ human_takeover: isHuman })
+        .eq('id', activeThread.id);
+
+      if (error) {
+        console.error('Error updating human_takeover in modal:', error);
+      }
+    } catch (err) {
+      console.error('Error updating human_takeover in modal:', err);
+    }
+
+    setThreads((prev) =>
+      prev.map((t) => (t.id === activeThread.id ? { ...t, isHumanHandedOff: isHuman } : t))
+    );
+  };
+
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || !activeThread) return;
@@ -156,6 +181,18 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
 
       if (error) {
         console.error('Error sending reply:', error);
+      }
+
+      if (sender === 'human') {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('send-human-reply', {
+          body: { to: activeThread.phone, text: text }
+        });
+
+        if (fnError) {
+          console.error('Failed to send human reply via edge function:', fnError);
+        } else {
+          console.log('Human reply sent successfully via edge function:', fnData);
+        }
       }
 
       const newMsg = {
@@ -238,6 +275,7 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
                     key={thread.id}
                     onClick={() => {
                       setActiveThreadId(thread.id);
+                      setTakeOverMode(thread.isHumanHandedOff || false);
                       setThreads((prev) =>
                         prev.map((t) => (t.id === thread.id ? { ...t, unreadCount: 0 } : t))
                       );
@@ -293,7 +331,7 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
                     <button
-                      onClick={() => setTakeOverMode(false)}
+                      onClick={() => toggleTakeover(false)}
                       className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                         !takeOverMode ? 'bg-white text-emerald-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
@@ -301,7 +339,7 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
                       <Bot className="w-3.5 h-3.5 inline mr-1" /> AI Active ({state.agentName || 'Sara'})
                     </button>
                     <button
-                      onClick={() => setTakeOverMode(true)}
+                      onClick={() => toggleTakeover(true)}
                       className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                         takeOverMode ? 'bg-white text-amber-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
@@ -318,7 +356,7 @@ export const LiveInboxModal: React.FC<LiveInboxProps> = ({ state, onClose }) => 
                     <UserCheck className="w-4 h-4 text-amber-600" /> You are manually replying as a human agent. AI is paused for this thread.
                   </span>
                   <button
-                    onClick={() => setTakeOverMode(false)}
+                    onClick={() => toggleTakeover(false)}
                     className="text-xs underline font-semibold text-amber-900 hover:text-amber-950 cursor-pointer"
                   >
                     Return to AI Mode

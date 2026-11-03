@@ -44,70 +44,6 @@ interface Order {
   status: OrderStatus;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_ORDERS: Order[] = [
-  {
-    id: 'WA-1001',
-    createdAt: '2026-10-09T10:12:00+05:00',
-    customer: { name: 'Ayesha Malik', phone: '+92 333 1122334' },
-    items: [{ name: 'Premium Cotton T-Shirt', qty: 2, unitPrice: 2499 }],
-    deliveryAddress: 'House 12, Street 7, DHA Phase 5',
-    city: 'Lahore',
-    paymentMethod: 'COD',
-    status: 'Confirmed',
-    notes: 'Please pack neatly — it is a gift.',
-  },
-  {
-    id: 'WA-1002',
-    createdAt: '2026-10-09T11:45:00+05:00',
-    customer: { name: 'Tariq Khan', phone: '+92 300 4455667' },
-    items: [
-      { name: 'Relaxed Cargo Pants', qty: 1, unitPrice: 3799 },
-      { name: 'Premium Cotton T-Shirt', qty: 1, unitPrice: 2499 },
-    ],
-    deliveryAddress: 'Flat 3B, Gulshan-e-Iqbal Block 10',
-    city: 'Karachi',
-    paymentMethod: 'EasyPaisa',
-    status: 'Pending',
-  },
-  {
-    id: 'WA-1003',
-    createdAt: '2026-10-08T14:30:00+05:00',
-    customer: { name: 'Sara Ahmed', phone: '+92 312 7788990' },
-    items: [{ name: 'Relaxed Cargo Pants', qty: 2, unitPrice: 3799 }],
-    deliveryAddress: 'Plot 55, F-7/2',
-    city: 'Islamabad',
-    paymentMethod: 'Bank Transfer',
-    status: 'Shipped',
-    notes: 'Call before delivery.',
-  },
-  {
-    id: 'WA-1004',
-    createdAt: '2026-10-07T09:05:00+05:00',
-    customer: { name: 'Hamza Ali', phone: '+92 321 9988776' },
-    items: [{ name: 'Premium Cotton T-Shirt', qty: 3, unitPrice: 2499 }],
-    deliveryAddress: 'House 8, Cavalry Ground',
-    city: 'Lahore',
-    paymentMethod: 'COD',
-    status: 'Delivered',
-  },
-  {
-    id: 'WA-1005',
-    createdAt: '2026-10-06T16:20:00+05:00',
-    customer: { name: 'Zara Siddiqui', phone: '+92 345 6677889' },
-    items: [
-      { name: 'Premium Cotton T-Shirt', qty: 1, unitPrice: 2499 },
-      { name: 'Relaxed Cargo Pants', qty: 1, unitPrice: 3799 },
-    ],
-    deliveryAddress: 'Apartment 9, Bahria Town Phase 4',
-    city: 'Rawalpindi',
-    paymentMethod: 'JazzCash',
-    status: 'Pending',
-    notes: 'Deliver after 6 PM.',
-  },
-];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const orderTotal = (order: Order): number =>
@@ -372,22 +308,16 @@ const OrderDrawer: React.FC<DrawerProps> = ({ order, onClose, onStatusChange }) 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const OrderManagement: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<OrderStatus | 'All'>('All');
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
-  const totalRevenue = orders
-    .filter((o) => o.status !== 'Cancelled')
-    .reduce((sum, o) => sum + orderTotal(o), 0);
-
-  const totalOrders = orders.filter((o) => o.status !== 'Cancelled').length;
-
-  const pendingDispatch = orders.filter(
-    (o) => o.status === 'Pending' || o.status === 'Confirmed'
-  ).length;
+  const totalRevenue = 0;
+  const totalOrders = 0;
+  const pendingDispatch = 0;
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -508,8 +438,8 @@ export const OrderManagement: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-slate-400 text-sm">
-                    No orders match your filter.
+                  <td colSpan={8} className="px-5 py-16 text-center text-slate-400 text-sm">
+                    No orders found. Orders placed via WhatsApp will appear here.
                   </td>
                 </tr>
               )}
